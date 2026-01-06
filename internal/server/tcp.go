@@ -60,12 +60,12 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	client := &Client{
-		conn:          conn,
 		authenticated: s.password == "",
 		db:            0,
 	}
 
-	fmt.Fprintln(conn, "Welcome to FerroDB v0.3.2")
+	fmt.Fprintln(conn, "Welcome to FerroDB v0.3.3")
+	writePrompt(conn, client.db)
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
@@ -80,21 +80,20 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		// 🔐 AUTH
 		if !client.authenticated && !isPublicCommand(command) {
 			fmt.Fprintln(conn, "NOAUTH Authentication required")
+			writePrompt(conn, client.db)
 			continue
 		}
 
 		if command == "AUTH" {
 			if len(cmd) < 2 {
 				fmt.Fprintln(conn, "ERR AUTH requires password")
-				continue
-			}
-
-			if cmd[1] == s.password {
+			} else if cmd[1] == s.password {
 				client.authenticated = true
 				fmt.Fprintln(conn, "OK")
 			} else {
 				fmt.Fprintln(conn, "ERR invalid password")
 			}
+			writePrompt(conn, client.db)
 			continue
 		}
 
@@ -102,17 +101,19 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		if command == "SELECT" {
 			if len(cmd) < 2 {
 				fmt.Fprintln(conn, "ERR SELECT requires index")
+				writePrompt(conn, client.db)
 				continue
 			}
 
 			db, err := strconv.Atoi(cmd[1])
 			if err != nil || db < 0 || db > 15 {
 				fmt.Fprintln(conn, "ERR invalid DB index")
+				writePrompt(conn, client.db)
 				continue
 			}
 
 			client.db = db
-			fmt.Fprintln(conn, "OK")
+			writePrompt(conn, client.db)
 			continue
 		}
 
@@ -125,6 +126,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		// ⚙ ENGINE EXECUTION
 		result := s.engine.Execute(client.db, line)
 		fmt.Fprintln(conn, result)
+		writePrompt(conn, client.db)
 	}
 }
 
@@ -142,4 +144,8 @@ func isPublicCommand(cmd string) bool {
 	default:
 		return false
 	}
+}
+
+func writePrompt(conn net.Conn, db int) {
+	fmt.Fprintf(conn, "%d> ", db)
 }
