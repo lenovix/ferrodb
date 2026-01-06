@@ -27,7 +27,7 @@ func (s *TCPServer) Start() error {
 		return err
 	}
 
-	fmt.Println("🚀 FerroDB TCP server running on", s.addr)
+	fmt.Println("🚀 FerroDB TCP server running on port", s.addr)
 
 	for {
 		conn, err := listener.Accept()

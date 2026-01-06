@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strconv"
 	"strings"
 
 	"ferrodb/internal/parser"
@@ -72,11 +73,29 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 		}
 		return "OK"
 
+	case "EXPIRE":
+		if len(cmd.Args) < 2 {
+			return "ERR EXPIRE requires key and seconds"
+		}
+
+		seconds, err := strconv.ParseInt(cmd.Args[1], 10, 64)
+		if err != nil || seconds <= 0 {
+			return "ERR invalid TTL"
+		}
+
+		ok := e.store.Expire(cmd.Args[0], seconds)
+		if !ok {
+			return "(nil)"
+		}
+
+		return "OK"
+
 	case "HELP":
 		return strings.Join([]string{
 			"SET key value",
 			"GET key",
 			"DEL key",
+			"EXPIRE key seconds",
 			"EXIT",
 		}, "\n")
 
