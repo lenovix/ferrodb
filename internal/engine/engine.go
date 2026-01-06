@@ -145,3 +145,10 @@ func (e *Engine) RewriteAOF() string {
 
 	return "OK"
 }
+
+func (e *Engine) Shutdown() {
+	if e.aof != nil {
+		e.aof.Sync()
+		e.aof.Close()
+	}
+}

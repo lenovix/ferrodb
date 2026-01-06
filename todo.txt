@@ -1,5 +1,4 @@
 > Wajib
-    - Graceful shutdown
     - fsync policy
     - Config file (port, data dir, YAML/ENV)
 

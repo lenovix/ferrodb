@@ -2,7 +2,9 @@ package server
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 
@@ -10,8 +12,9 @@ import (
 )
 
 type TCPServer struct {
-	addr   string
-	engine *engine.Engine
+	addr     string
+	engine   *engine.Engine
+	listener net.Listener
 }
 
 func NewTCPServer(addr string, engine *engine.Engine) *TCPServer {
@@ -22,17 +25,21 @@ func NewTCPServer(addr string, engine *engine.Engine) *TCPServer {
 }
 
 func (s *TCPServer) Start() error {
-	listener, err := net.Listen("tcp", s.addr)
+	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("🚀 FerroDB TCP server running on port", s.addr)
+	s.listener = ln
+	log.Println("🚀 FerroDB TCP server running on", s.addr)
 
 	for {
-		conn, err := listener.Accept()
+		conn, err := ln.Accept()
 		if err != nil {
-			fmt.Println("accept error:", err)
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+			log.Println("accept error:", err)
 			continue
 		}
 
@@ -60,5 +67,12 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 
 		result := s.engine.Execute(line)
 		fmt.Fprintln(conn, result)
+	}
+}
+
+func (s *TCPServer) Shutdown() {
+	if s.listener != nil {
+		log.Println("🔌 Closing TCP listener")
+		s.listener.Close()
 	}
 }

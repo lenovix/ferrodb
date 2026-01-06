@@ -86,3 +86,7 @@ func (a *AOF) Rewrite(snapshot map[string]storage.Item) error {
 	a.file, err = os.OpenFile(a.file.Name(), os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
 	return err
 }
+
+func (a *AOF) Sync() error {
+	return a.file.Sync()
+}
