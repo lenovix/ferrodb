@@ -19,7 +19,7 @@ type Engine struct {
 }
 
 func New(cfg *config.Config) *Engine {
-	store := storage.NewMemoryStore(cfg.Engine.CleanupIntervalSec)
+	store := storage.NewMemoryStore(cfg.Engine.DBCount, cfg.Engine.CleanupIntervalSec)
 
 	aof, err := persistence.OpenAOF("data/ferrodb.aof")
 	if err != nil {
@@ -27,33 +27,37 @@ func New(cfg *config.Config) *Engine {
 	}
 
 	engine := &Engine{
-		store: store,
-		aof:   aof,
+		store:     store,
+		aof:       aof,
+		startTime: time.Now(),
 	}
 
-	// 🔁 Replay data from disk
+	// 🔁 Replay AOF (default DB = 0)
 	aof.Replay(func(line string) {
-		engine.executeInternal(line, false)
+		engine.executeInternal(0, line, false)
 	})
 
 	return engine
 }
 
-func (e *Engine) Execute(input string) string {
-	return e.executeInternal(input, true)
+func (e *Engine) Execute(db int, input string) string {
+	return e.executeInternal(db, input, true)
 }
 
-func (e *Engine) executeInternal(input string, persist bool) string {
+func (e *Engine) executeInternal(db int, input string, persist bool) string {
 	cmd := parser.Parse(input)
 
 	switch cmd.Name {
+
 	case "SET":
 		if len(cmd.Args) < 2 {
 			return "ERR SET requires key and value"
 		}
-		e.store.Set(cmd.Args[0], cmd.Args[1])
+
+		e.store.Set(db, cmd.Args[0], cmd.Args[1])
+
 		if persist {
-			e.aof.Write(input)
+			e.aof.Write(fmt.Sprintf("SET %d %s %s", db, cmd.Args[0], cmd.Args[1]))
 		}
 		return "OK"
 
@@ -61,7 +65,8 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 		if len(cmd.Args) < 1 {
 			return "ERR GET requires key"
 		}
-		val, ok := e.store.Get(cmd.Args[0])
+
+		val, ok := e.store.Get(db, cmd.Args[0])
 		if !ok {
 			return "(nil)"
 		}
@@ -71,9 +76,11 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 		if len(cmd.Args) < 1 {
 			return "ERR DEL requires key"
 		}
-		e.store.Del(cmd.Args[0])
+
+		e.store.Del(db, cmd.Args[0])
+
 		if persist {
-			e.aof.Write(input)
+			e.aof.Write(fmt.Sprintf("DEL %d %s", db, cmd.Args[0]))
 		}
 		return "OK"
 
@@ -88,36 +95,52 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 		}
 
 		expireAt := time.Now().Unix() + seconds
-
-		ok := e.store.ExpireAt(cmd.Args[0], expireAt)
+		ok := e.store.ExpireAt(db, cmd.Args[0], expireAt)
 		if !ok {
 			return "(nil)"
 		}
 
 		if persist {
-			e.aof.Write(
-				fmt.Sprintf("EXPIREAT %s %d", cmd.Args[0], expireAt),
-			)
+			e.aof.Write(fmt.Sprintf("EXPIREAT %d %s %d", db, cmd.Args[0], expireAt))
 		}
-
 		return "OK"
 
 	case "EXPIREAT":
-		if len(cmd.Args) < 2 {
-			return "ERR EXPIREAT requires key and timestamp"
+		if len(cmd.Args) < 3 {
+			return "ERR EXPIREAT requires db key timestamp"
 		}
 
-		timestamp, err := strconv.ParseInt(cmd.Args[1], 10, 64)
+		dbi, _ := strconv.Atoi(cmd.Args[0])
+		timestamp, err := strconv.ParseInt(cmd.Args[2], 10, 64)
 		if err != nil {
 			return "ERR invalid timestamp"
 		}
 
-		ok := e.store.ExpireAt(cmd.Args[0], timestamp)
-		if !ok {
-			return "(nil)"
+		e.store.ExpireAt(dbi, cmd.Args[1], timestamp)
+		return "OK"
+
+	case "TTL":
+		if len(cmd.Args) < 1 {
+			return "ERR TTL requires key"
 		}
 
-		return "OK"
+		ttl := e.store.TTL(db, cmd.Args[0])
+		return strconv.FormatInt(ttl, 10)
+
+	case "PERSIST":
+		if len(cmd.Args) < 1 {
+			return "ERR PERSIST requires key"
+		}
+
+		ok := e.store.Persist(db, cmd.Args[0])
+		if !ok {
+			return "0"
+		}
+
+		if persist {
+			e.aof.Write(fmt.Sprintf("PERSIST %d %s", db, cmd.Args[0]))
+		}
+		return "1"
 
 	case "BGREWRITEAOF":
 		go e.RewriteAOF()
@@ -126,40 +149,17 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 	case "INFO":
 		return e.Info()
 
-	case "TTL":
-		if len(cmd.Args) < 1 {
-			return "ERR TTL requires key"
-		}
-
-		ttl := e.store.TTL(cmd.Args[0])
-		return strconv.FormatInt(ttl, 10)
-
-	case "PERSIST":
-		if len(cmd.Args) < 1 {
-			return "ERR PERSIST requires key"
-		}
-
-		ok := e.store.Persist(cmd.Args[0])
-		if !ok {
-			return "0"
-		}
-
-		if persist {
-			e.aof.Write(fmt.Sprintf("PERSIST %s", cmd.Args[0]))
-		}
-
-		return "1"
-
 	case "HELP":
 		return strings.Join([]string{
 			"SET key value",
 			"GET key",
 			"DEL key",
 			"EXPIRE key seconds",
-			"BGREWRITEAOF",
-			"INFO",
 			"TTL key",
 			"PERSIST key",
+			"BGREWRITEAOF",
+			"INFO",
+			"SELECT db",
 			"EXIT",
 		}, "\n")
 
@@ -170,11 +170,9 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 
 func (e *Engine) RewriteAOF() string {
 	snapshot := e.store.Snapshot()
-
 	if err := e.aof.Rewrite(snapshot); err != nil {
 		return "ERR rewrite failed"
 	}
-
 	return "OK"
 }
 

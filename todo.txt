@@ -12,7 +12,13 @@
     - Raft
 
 > Other
+ACL/Auth improvement
+RESP protocol
 🧪 Unit Test (engine & storage)
 Protocol improvement
     - Response konsisten
     - Error code
+
+🔥 [v0.3.3] AUTH + ACL (role-based)
+⚡ [v0.4.0] Storage Engine: LSM Tree (hardcore)
+📦 [v0.3.3] Docker + systemd deployment

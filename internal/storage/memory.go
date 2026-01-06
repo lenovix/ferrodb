@@ -11,125 +11,76 @@ type Item struct {
 }
 
 type MemoryStore struct {
-	data map[string]Item
+	data []map[string]Item
 	mu   sync.RWMutex
 }
 
-func NewMemoryStore(cleanupIntervalSec int) *MemoryStore {
-	store := &MemoryStore{
-		data: make(map[string]Item),
+func NewMemoryStore(dbCount int, cleanupIntervalSec int) *MemoryStore {
+	data := make([]map[string]Item, dbCount)
+	for i := range data {
+		data[i] = make(map[string]Item)
 	}
 
-	interval := time.Duration(cleanupIntervalSec) * time.Second
-	go store.cleanupExpiredKeys(interval)
+	store := &MemoryStore{data: data}
+
+	go store.cleanupExpiredKeys(time.Duration(cleanupIntervalSec) * time.Second)
+
 	return store
 }
 
-func (m *MemoryStore) Set(key, value string) {
+func (m *MemoryStore) Set(db int, key, value string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item := m.data[key]
+	item := m.data[db][key]
 	item.Value = value
-	m.data[key] = item
+	item.ExpireAt = 0
+	m.data[db][key] = item
 }
 
-func (m *MemoryStore) Get(key string) (string, bool) {
+func (m *MemoryStore) Get(db int, key string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item, ok := m.data[key]
+	item, ok := m.data[db][key]
 	if !ok {
 		return "", false
 	}
 
 	if item.ExpireAt > 0 && time.Now().Unix() > item.ExpireAt {
-		delete(m.data, key)
+		delete(m.data[db], key)
 		return "", false
 	}
 
 	return item.Value, true
 }
 
-func (m *MemoryStore) Del(key string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.data, key)
-}
-
-func (m *MemoryStore) Expire(key string, seconds int64) bool {
+func (m *MemoryStore) Del(db int, key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item, ok := m.data[key]
-	if !ok {
-		return false
-	}
-
-	item.ExpireAt = time.Now().Unix() + seconds
-	m.data[key] = item
-	return true
+	delete(m.data[db], key)
 }
 
-func (m *MemoryStore) cleanupExpiredKeys(time.Duration) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		now := time.Now().Unix()
-
-		m.mu.Lock()
-		for k, v := range m.data {
-			if v.ExpireAt > 0 && now > v.ExpireAt {
-				delete(m.data, k)
-			}
-		}
-		m.mu.Unlock()
-	}
-}
-
-func (m *MemoryStore) ExpireAt(key string, timestamp int64) bool {
+func (m *MemoryStore) ExpireAt(db int, key string, timestamp int64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item, ok := m.data[key]
+	item, ok := m.data[db][key]
 	if !ok {
 		return false
 	}
 
 	item.ExpireAt = timestamp
-	m.data[key] = item
+	m.data[db][key] = item
 	return true
 }
 
-func (m *MemoryStore) Snapshot() map[string]Item {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	snap := make(map[string]Item, len(m.data))
-	now := time.Now().Unix()
-
-	for k, v := range m.data {
-		if v.ExpireAt > 0 && now > v.ExpireAt {
-			continue
-		}
-		snap[k] = v
-	}
-
-	return snap
-}
-
-func (m *MemoryStore) Size() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.data)
-}
-
-func (m *MemoryStore) TTL(key string) int64 {
+func (m *MemoryStore) TTL(db int, key string) int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item, ok := m.data[key]
+	item, ok := m.data[db][key]
 	if !ok {
 		return -2
 	}
@@ -140,27 +91,76 @@ func (m *MemoryStore) TTL(key string) int64 {
 
 	now := time.Now().Unix()
 	if now >= item.ExpireAt {
-		delete(m.data, key)
+		delete(m.data[db], key)
 		return -2
 	}
 
 	return item.ExpireAt - now
 }
 
-func (m *MemoryStore) Persist(key string) bool {
+func (m *MemoryStore) Persist(db int, key string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item, ok := m.data[key]
-	if !ok {
-		return false
-	}
-
-	if item.ExpireAt == 0 {
+	item, ok := m.data[db][key]
+	if !ok || item.ExpireAt == 0 {
 		return false
 	}
 
 	item.ExpireAt = 0
-	m.data[key] = item
+	m.data[db][key] = item
 	return true
+}
+
+func (m *MemoryStore) Snapshot() map[int]map[string]Item {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	snap := make(map[int]map[string]Item)
+	now := time.Now().Unix()
+
+	for db, kv := range m.data {
+		dbSnap := make(map[string]Item)
+		for k, v := range kv {
+			if v.ExpireAt > 0 && now > v.ExpireAt {
+				continue
+			}
+			dbSnap[k] = v
+		}
+		if len(dbSnap) > 0 {
+			snap[db] = dbSnap
+		}
+	}
+
+	return snap
+}
+
+func (m *MemoryStore) Size() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	total := 0
+	for _, kv := range m.data {
+		total += len(kv)
+	}
+	return total
+}
+
+func (m *MemoryStore) cleanupExpiredKeys(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now().Unix()
+
+		m.mu.Lock()
+		for db, kv := range m.data {
+			for k, v := range kv {
+				if v.ExpireAt > 0 && now > v.ExpireAt {
+					delete(m.data[db], k)
+				}
+			}
+		}
+		m.mu.Unlock()
+	}
 }

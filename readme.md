@@ -1,5 +1,6 @@
 version     | description 
 -----       | --- 
+0.3.2       | Usability (AUTH, Multi-DB, Error message)
 0.3.1       | TTL key + PERSIST key
 0.3         | Config file + INFO command
 0.2.5       | Graceful Shutdown + Signal Handling

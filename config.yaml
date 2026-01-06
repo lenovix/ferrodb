@@ -1,9 +1,11 @@
 server:
   address: ":6380"
+  password: "secret"
 
 data:
   dir: "data"
   aof_file: "ferrodb.aof"
 
 engine:
+  db_count: 16
   cleanup_interval_sec: 1
