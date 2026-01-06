@@ -1,38 +1,18 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"strings"
+	"log"
 
 	"ferrodb/internal/engine"
+	"ferrodb/internal/server"
 )
 
 func main() {
-	fmt.Println("FerroDB v0.1")
-	fmt.Println("Type HELP for commands")
-
 	eng := engine.New()
 
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			break
-		}
+	tcpServer := server.NewTCPServer(":6380", eng)
 
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		if strings.ToUpper(line) == "EXIT" {
-			fmt.Println("Bye 👋")
-			break
-		}
-
-		result := eng.Execute(line)
-		fmt.Println(result)
+	if err := tcpServer.Start(); err != nil {
+		log.Fatal(err)
 	}
 }

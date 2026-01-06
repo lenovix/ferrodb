@@ -1,5 +1,10 @@
-🌐 TCP Server (client-server DB)
 📦 Snapshot (AOF terlalu besar)
 🧪 Unit Test (engine & storage)
 ⚡ Transaction sederhana
 🧱 B-Tree / LSM Tree
+TTL / EXPIRE command
+Config file (port, data dir)
+Graceful shutdown
+Protocol improvement
+    - Response konsisten
+    - Error code
