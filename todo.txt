@@ -1,19 +1,19 @@
 > Wajib
-    - 📦 Snapshot / AOF rewrite
     - Graceful shutdown
-    - Config file (port, data dir)
+    - fsync policy
+    - Config file (port, data dir, YAML/ENV)
 
 > Core DB
     - TTL key (cek sisa waktu)
     - PERSIST key
     - ⚡ Transaction sederhana
     - Transaction mini (MULTI)
-    - Keyspace stats
+    - Keyspace stats/info
 
 > Advanced
     - 🧱 B-Tree / LSM Tree
     - Replication
-    - Raft (kalau mau gila 😄)
+    - Raft
 
 > Other
 🧪 Unit Test (engine & storage)

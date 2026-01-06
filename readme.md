@@ -1,5 +1,6 @@
 version | description 
 --- | --- 
+0.2.4 | Snapshot / AOF Rewrite
 0.2.3 | Persist TTL
 0.2.2 | TTL / EXPIRE command
 0.2.1 | TCP Server

@@ -117,16 +117,31 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 
 		return "OK"
 
+	case "BGREWRITEAOF":
+		go e.RewriteAOF()
+		return "OK"
+
 	case "HELP":
 		return strings.Join([]string{
 			"SET key value",
 			"GET key",
 			"DEL key",
 			"EXPIRE key seconds",
+			"BGREWRITEAOF",
 			"EXIT",
 		}, "\n")
 
 	default:
 		return "ERR unknown command"
 	}
+}
+
+func (e *Engine) RewriteAOF() string {
+	snapshot := e.store.Snapshot()
+
+	if err := e.aof.Rewrite(snapshot); err != nil {
+		return "ERR rewrite failed"
+	}
+
+	return "OK"
 }

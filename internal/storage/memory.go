@@ -100,3 +100,20 @@ func (m *MemoryStore) ExpireAt(key string, timestamp int64) bool {
 	m.data[key] = item
 	return true
 }
+
+func (m *MemoryStore) Snapshot() map[string]Item {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	snap := make(map[string]Item, len(m.data))
+	now := time.Now().Unix()
+
+	for k, v := range m.data {
+		if v.ExpireAt > 0 && now > v.ExpireAt {
+			continue
+		}
+		snap[k] = v
+	}
+
+	return snap
+}
