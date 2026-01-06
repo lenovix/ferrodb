@@ -15,12 +15,13 @@ type MemoryStore struct {
 	mu   sync.RWMutex
 }
 
-func NewMemoryStore() *MemoryStore {
+func NewMemoryStore(cleanupIntervalSec int) *MemoryStore {
 	store := &MemoryStore{
 		data: make(map[string]Item),
 	}
 
-	go store.cleanupExpiredKeys()
+	interval := time.Duration(cleanupIntervalSec) * time.Second
+	go store.cleanupExpiredKeys(interval)
 	return store
 }
 
@@ -70,7 +71,7 @@ func (m *MemoryStore) Expire(key string, seconds int64) bool {
 	return true
 }
 
-func (m *MemoryStore) cleanupExpiredKeys() {
+func (m *MemoryStore) cleanupExpiredKeys(time.Duration) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -116,4 +117,10 @@ func (m *MemoryStore) Snapshot() map[string]Item {
 	}
 
 	return snap
+}
+
+func (m *MemoryStore) Size() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.data)
 }

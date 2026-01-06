@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"ferrodb/internal/config"
 	"ferrodb/internal/engine"
 	"ferrodb/internal/server"
 )
@@ -19,8 +20,13 @@ func main() {
 	)
 	defer stop()
 
-	eng := engine.New()
-	tcpServer := server.NewTCPServer(":6380", eng)
+	cfg, err := config.Load("config.yaml")
+	if err != nil {
+		log.Fatal("failed to load config:", err)
+	}
+
+	eng := engine.New(cfg)
+	tcpServer := server.NewTCPServer(cfg.Server.Address, eng)
 
 	go func() {
 		if err := tcpServer.Start(); err != nil {

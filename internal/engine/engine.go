@@ -6,18 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"ferrodb/internal/config"
 	"ferrodb/internal/parser"
 	"ferrodb/internal/persistence"
 	"ferrodb/internal/storage"
 )
 
 type Engine struct {
-	store *storage.MemoryStore
-	aof   *persistence.AOF
+	store     *storage.MemoryStore
+	aof       *persistence.AOF
+	startTime time.Time
 }
 
-func New() *Engine {
-	store := storage.NewMemoryStore()
+func New(cfg *config.Config) *Engine {
+	store := storage.NewMemoryStore(cfg.Engine.CleanupIntervalSec)
 
 	aof, err := persistence.OpenAOF("data/ferrodb.aof")
 	if err != nil {
@@ -121,6 +123,9 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 		go e.RewriteAOF()
 		return "OK"
 
+	case "INFO":
+		return e.Info()
+
 	case "HELP":
 		return strings.Join([]string{
 			"SET key value",
@@ -128,6 +133,7 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 			"DEL key",
 			"EXPIRE key seconds",
 			"BGREWRITEAOF",
+			"INFO",
 			"EXIT",
 		}, "\n")
 

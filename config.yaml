@@ -1,0 +1,9 @@
+server:
+  address: ":6380"
+
+data:
+  dir: "data"
+  aof_file: "ferrodb.aof"
+
+engine:
+  cleanup_interval_sec: 1
