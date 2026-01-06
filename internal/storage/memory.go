@@ -124,3 +124,43 @@ func (m *MemoryStore) Size() int {
 	defer m.mu.RUnlock()
 	return len(m.data)
 }
+
+func (m *MemoryStore) TTL(key string) int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	item, ok := m.data[key]
+	if !ok {
+		return -2
+	}
+
+	if item.ExpireAt == 0 {
+		return -1
+	}
+
+	now := time.Now().Unix()
+	if now >= item.ExpireAt {
+		delete(m.data, key)
+		return -2
+	}
+
+	return item.ExpireAt - now
+}
+
+func (m *MemoryStore) Persist(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	item, ok := m.data[key]
+	if !ok {
+		return false
+	}
+
+	if item.ExpireAt == 0 {
+		return false
+	}
+
+	item.ExpireAt = 0
+	m.data[key] = item
+	return true
+}

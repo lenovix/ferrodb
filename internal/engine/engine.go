@@ -126,6 +126,30 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 	case "INFO":
 		return e.Info()
 
+	case "TTL":
+		if len(cmd.Args) < 1 {
+			return "ERR TTL requires key"
+		}
+
+		ttl := e.store.TTL(cmd.Args[0])
+		return strconv.FormatInt(ttl, 10)
+
+	case "PERSIST":
+		if len(cmd.Args) < 1 {
+			return "ERR PERSIST requires key"
+		}
+
+		ok := e.store.Persist(cmd.Args[0])
+		if !ok {
+			return "0"
+		}
+
+		if persist {
+			e.aof.Write(fmt.Sprintf("PERSIST %s", cmd.Args[0]))
+		}
+
+		return "1"
+
 	case "HELP":
 		return strings.Join([]string{
 			"SET key value",
@@ -134,6 +158,8 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 			"EXPIRE key seconds",
 			"BGREWRITEAOF",
 			"INFO",
+			"TTL key",
+			"PERSIST key",
 			"EXIT",
 		}, "\n")
 

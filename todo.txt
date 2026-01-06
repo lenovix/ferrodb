@@ -1,10 +1,7 @@
 > Wajib
     - fsync policy
-    - Config file (port, data dir, YAML/ENV)
 
 > Core DB
-    - TTL key (cek sisa waktu)
-    - PERSIST key
     - ⚡ Transaction sederhana
     - Transaction mini (MULTI)
     - Keyspace stats/info
