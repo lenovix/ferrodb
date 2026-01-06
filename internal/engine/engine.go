@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"ferrodb/internal/parser"
 	"ferrodb/internal/persistence"
@@ -83,7 +85,32 @@ func (e *Engine) executeInternal(input string, persist bool) string {
 			return "ERR invalid TTL"
 		}
 
-		ok := e.store.Expire(cmd.Args[0], seconds)
+		expireAt := time.Now().Unix() + seconds
+
+		ok := e.store.ExpireAt(cmd.Args[0], expireAt)
+		if !ok {
+			return "(nil)"
+		}
+
+		if persist {
+			e.aof.Write(
+				fmt.Sprintf("EXPIREAT %s %d", cmd.Args[0], expireAt),
+			)
+		}
+
+		return "OK"
+
+	case "EXPIREAT":
+		if len(cmd.Args) < 2 {
+			return "ERR EXPIREAT requires key and timestamp"
+		}
+
+		timestamp, err := strconv.ParseInt(cmd.Args[1], 10, 64)
+		if err != nil {
+			return "ERR invalid timestamp"
+		}
+
+		ok := e.store.ExpireAt(cmd.Args[0], timestamp)
 		if !ok {
 			return "(nil)"
 		}

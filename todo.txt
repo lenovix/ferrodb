@@ -1,9 +1,22 @@
-📦 Snapshot (AOF terlalu besar)
+> Wajib
+    - 📦 Snapshot / AOF rewrite
+    - Graceful shutdown
+    - Config file (port, data dir)
+
+> Core DB
+    - TTL key (cek sisa waktu)
+    - PERSIST key
+    - ⚡ Transaction sederhana
+    - Transaction mini (MULTI)
+    - Keyspace stats
+
+> Advanced
+    - 🧱 B-Tree / LSM Tree
+    - Replication
+    - Raft (kalau mau gila 😄)
+
+> Other
 🧪 Unit Test (engine & storage)
-⚡ Transaction sederhana
-🧱 B-Tree / LSM Tree
-Config file (port, data dir)
-Graceful shutdown
 Protocol improvement
     - Response konsisten
     - Error code

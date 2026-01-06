@@ -86,3 +86,17 @@ func (m *MemoryStore) cleanupExpiredKeys() {
 		m.mu.Unlock()
 	}
 }
+
+func (m *MemoryStore) ExpireAt(key string, timestamp int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	item, ok := m.data[key]
+	if !ok {
+		return false
+	}
+
+	item.ExpireAt = timestamp
+	m.data[key] = item
+	return true
+}
