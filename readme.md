@@ -1,38 +1,68 @@
-version     | description 
------       | --- 
-0.3.3       | Improve Multi-DB
-0.3.2       | Usability (AUTH, Multi-DB, Error message)
-0.3.1       | TTL key + PERSIST key
-0.3         | Config file + INFO command
-0.2.5       | Graceful Shutdown + Signal Handling
-0.2.4       | Snapshot / AOF Rewrite
-0.2.3       | Persist TTL
-0.2.2       | TTL / EXPIRE command
-0.2.1       | TCP Server
-0.2         | AOF Persistence
+## 📦 Version History
 
+| Version | Description                                                    |
+| ------: | -------------------------------------------------------------- |
+|   0.3.3 | Improve Multi-DB                                               |
+|   0.3.2 | Usability improvements (AUTH, Multi-DB, better error messages) |
+|   0.3.1 | TTL key + `PERSIST` command                                    |
+|   0.3.0 | Config file support + `INFO` command                           |
+|   0.2.5 | Graceful shutdown + signal handling                            |
+|   0.2.4 | Snapshot / AOF rewrite                                         |
+|   0.2.3 | Persist TTL                                                    |
+|   0.2.2 | TTL / `EXPIRE` command                                         |
+|   0.2.1 | TCP server                                                     |
+|   0.2.0 | AOF persistence                                                |
 
-How to Run:
+---
+
+## How to Run
+
+Jalankan server ferroDB:
+
+```bash
 go run ./cmd/ferrodb
+```
 
-//in other terminal:
-telnet 10.124.39.76 6380
+Buka terminal lain untuk menghubungkan client menggunakan Telnet:
 
+```bash
+telnet [your ip] 6380
+```
 
-| Kondisi TTL key     | Return     |
-| ------------------- | ---------- |
-| key tidak ada       | `-2`       |
-| key ada & tanpa TTL | `-1`       |
-| key ada & ada TTL   | sisa detik |
+> Pastikan alamat IP dan port sesuai dengan konfigurasi server kamu.
 
+---
 
-| Kondisi PERSIST key                   | Return     |
-| ------------------------------------- | ---------- |
-| TTL berhasil dihapus                  | `1`        |
-| key tidak ada/tidak punya TTL         | `0`        |
+## ⏱️ TTL Behavior
 
+### Return Value untuk TTL Key
 
-Glamory:
-AOL
-TTL
-TCP
+| Kondisi Key            | Return             |
+| ---------------------- | ------------------ |
+| Key tidak ada          | `-2`               |
+| Key ada & tanpa TTL    | `-1`               |
+| Key ada & memiliki TTL | Sisa waktu (detik) |
+
+---
+
+## ♻️ PERSIST Command
+
+### Return Value untuk `PERSIST`
+
+| Kondisi                            | Return |
+| ---------------------------------- | ------ |
+| TTL berhasil dihapus               | `1`    |
+| Key tidak ada / tidak memiliki TTL | `0`    |
+
+---
+
+## 📖 Glossary
+
+- **AOF (Append Only File)**
+  Mekanisme persistence dengan mencatat setiap perintah write ke dalam file log.
+
+- **TTL (Time To Live)**
+  Waktu hidup sebuah key sebelum otomatis dihapus.
+
+- **TCP**
+  Protokol jaringan yang digunakan ferroDB untuk komunikasi client-server.
