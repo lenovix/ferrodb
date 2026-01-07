@@ -22,9 +22,7 @@ func NewMemoryStore(dbCount int, cleanupIntervalSec int) *MemoryStore {
 	}
 
 	store := &MemoryStore{data: data}
-
 	go store.cleanupExpiredKeys(time.Duration(cleanupIntervalSec) * time.Second)
-
 	return store
 }
 
@@ -39,27 +37,33 @@ func (m *MemoryStore) Set(db int, key, value string) {
 }
 
 func (m *MemoryStore) Get(db int, key string) (string, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	m.mu.RLock()
 	item, ok := m.data[db][key]
+	m.mu.RUnlock()
+
 	if !ok {
 		return "", false
 	}
 
 	if item.ExpireAt > 0 && time.Now().Unix() > item.ExpireAt {
+		m.mu.Lock()
 		delete(m.data[db], key)
+		m.mu.Unlock()
 		return "", false
 	}
 
 	return item.Value, true
 }
 
-func (m *MemoryStore) Del(db int, key string) {
+func (m *MemoryStore) Del(db int, key string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.data[db], key)
+	if _, ok := m.data[db][key]; ok {
+		delete(m.data[db], key)
+		return 1
+	}
+	return 0
 }
 
 func (m *MemoryStore) ExpireAt(db int, key string, timestamp int64) bool {
@@ -163,4 +167,8 @@ func (m *MemoryStore) cleanupExpiredKeys(interval time.Duration) {
 		}
 		m.mu.Unlock()
 	}
+}
+
+func (m *MemoryStore) DBCount() int {
+	return len(m.data)
 }

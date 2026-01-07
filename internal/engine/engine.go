@@ -21,7 +21,7 @@ type Engine struct {
 func New(cfg *config.Config) *Engine {
 	store := storage.NewMemoryStore(cfg.Engine.DBCount, cfg.Engine.CleanupIntervalSec)
 
-	aof, err := persistence.OpenAOF("data/ferrodb.aof")
+	aof, err := persistence.OpenAOF(cfg.AOFPath())
 	if err != nil {
 		panic(err)
 	}
@@ -32,9 +32,20 @@ func New(cfg *config.Config) *Engine {
 		startTime: time.Now(),
 	}
 
-	// 🔁 Replay AOF (default DB = 0)
 	aof.Replay(func(line string) {
-		engine.executeInternal(0, line, false)
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			return
+		}
+
+		db, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return
+		}
+
+		// buang arg DB
+		cmd := strings.Join(append([]string{parts[0]}, parts[2:]...), " ")
+		engine.executeInternal(db, cmd, false)
 	})
 
 	return engine
@@ -77,12 +88,12 @@ func (e *Engine) executeInternal(db int, input string, persist bool) string {
 			return "ERR DEL requires key"
 		}
 
-		e.store.Del(db, cmd.Args[0])
+		deleted := e.store.Del(db, cmd.Args[0])
 
 		if persist {
 			e.aof.Write(fmt.Sprintf("DEL %d %s", db, cmd.Args[0]))
 		}
-		return "OK"
+		return strconv.Itoa(deleted)
 
 	case "EXPIRE":
 		if len(cmd.Args) < 2 {
@@ -110,7 +121,11 @@ func (e *Engine) executeInternal(db int, input string, persist bool) string {
 			return "ERR EXPIREAT requires db key timestamp"
 		}
 
-		dbi, _ := strconv.Atoi(cmd.Args[0])
+		dbi, err := strconv.Atoi(cmd.Args[0])
+		if err != nil {
+			return "ERR invalid DB"
+		}
+
 		timestamp, err := strconv.ParseInt(cmd.Args[2], 10, 64)
 		if err != nil {
 			return "ERR invalid timestamp"
@@ -186,4 +201,8 @@ func (e *Engine) Shutdown() {
 		e.aof.Sync()
 		e.aof.Close()
 	}
+}
+
+func (e *Engine) DBCount() int {
+	return e.store.DBCount()
 }

@@ -27,6 +27,7 @@ func main() {
 
 	eng := engine.New(cfg)
 
+	// 🔴 TCP (redis-cli)
 	tcpServer := server.NewTCPServer(
 		cfg.Server.Address,
 		cfg.Users,
@@ -34,11 +35,21 @@ func main() {
 		eng,
 	)
 
+	// 🟢 HTTP (Web UI / API)
+	httpServer := server.NewHTTPServer(
+		":8080",
+		eng,
+	)
+
 	go func() {
 		if err := tcpServer.Start(); err != nil {
-			log.Println("server error:", err)
+			log.Println("TCP server error:", err)
 			stop()
 		}
+	}()
+
+	go func() {
+		httpServer.Start()
 	}()
 
 	<-ctx.Done()

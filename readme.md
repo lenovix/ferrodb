@@ -1,7 +1,14 @@
+FerroDB — Redis-like Key-Value Database with Built-in Web Admin
+Redis
+KeyDB
+Etcd (simplified)
+
 ## 📦 Version History
 
 | Version | Description                                                    |
 | ------: | -------------------------------------------------------------- |
+|   0.5 | HTTP API + Web UI (Alpha)                                                   |
+|   0.4.1 | Redis Compatibility Basics                                                   |
 |   0.4 | RESP protocol                                                   |
 |   0.3.5 | ACL Commands                                                   |
 |   0.3.5 | Password hashing (bcrypt) + secure AUTH                        |
