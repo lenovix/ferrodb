@@ -2,6 +2,7 @@
 
 | Version | Description                                                    |
 | ------: | -------------------------------------------------------------- |
+|   0.3.4 | AUTH + ACL (role-based)                                               |
 |   0.3.3 | Improve Multi-DB                                               |
 |   0.3.2 | Usability improvements (AUTH, Multi-DB, better error messages) |
 |   0.3.1 | TTL key + `PERSIST` command                                    |

@@ -7,11 +7,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type User struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Role     string `yaml:"role"`
+}
+
 type Config struct {
 	Server struct {
-		Address  string `yaml:"address"`
-		Password string `yaml:"password"`
+		Address string `yaml:"address"`
 	} `yaml:"server"`
+
+	Users []User `yaml:"users"`
 
 	Data struct {
 		Dir     string `yaml:"dir"`
@@ -44,7 +51,6 @@ func defaultConfig() *Config {
 	cfg := &Config{}
 
 	cfg.Server.Address = ":6380"
-	cfg.Server.Password = ""
 
 	cfg.Data.Dir = "data"
 	cfg.Data.AOFFile = "ferrodb.aof"
@@ -77,7 +83,6 @@ func (c *Config) applyDefaults() {
 	}
 }
 
-// Helper: full path to AOF
 func (c *Config) AOFPath() string {
 	return filepath.Join(c.Data.Dir, c.Data.AOFFile)
 }

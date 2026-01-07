@@ -1,6 +1,18 @@
 server:
   address: ":6380"
-  password: "secret"
+
+users:
+  - username: admin
+    password: admin123
+    role: admin
+
+  - username: app
+    password: app123
+    role: writer
+
+  - username: guest
+    password: guest
+    role: reader
 
 data:
   dir: "data"

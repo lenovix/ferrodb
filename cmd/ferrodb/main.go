@@ -26,9 +26,10 @@ func main() {
 	}
 
 	eng := engine.New(cfg)
+
 	tcpServer := server.NewTCPServer(
 		cfg.Server.Address,
-		cfg.Server.Password,
+		cfg.Users,
 		eng,
 	)
 

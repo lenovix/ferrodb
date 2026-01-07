@@ -19,6 +19,16 @@ Protocol improvement
     - Response konsisten
     - Error code
 
-🔥 [v0.3.3] AUTH + ACL (role-based)
+1️⃣ Password hashing (bcrypt)
+2️⃣ ACL LIST / SETUSER
+3️⃣ RESP protocol
+4️⃣ Redis compatibility
+5️⃣ Audit log
 ⚡ [v0.4.0] Storage Engine: LSM Tree (hardcore)
 📦 [v0.3.3] Docker + systemd deployment
+
+🔐 v0.3.5
+bcrypt password hash
+config tidak simpan plaintext password
+
+🌐 v0.4.0 RESP protocol (bisa pakai redis-cli)
