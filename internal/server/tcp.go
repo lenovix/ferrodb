@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -106,11 +107,12 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		line = strings.TrimSpace(line)
 
 		if line == "" {
-			writePrompt(conn, client.db)
+			maybePrompt(conn, client)
 			continue
 		}
 
 		if line[0] == '*' {
+			client.resp = true
 			args, err := readRESPFromLine(reader, line)
 			if err != nil {
 				writeError(conn, "ERR invalid RESP")
@@ -133,7 +135,7 @@ func (s *TCPServer) Shutdown() {
 
 func isPublicCommand(cmd string) bool {
 	switch cmd {
-	case "HELP", "INFO", "EXIT":
+	case "HELP", "INFO", "PING", "ECHO", "COMMAND", "HELLO", "EXIT":
 		return true
 	default:
 		return false
@@ -238,6 +240,42 @@ func (s *TCPServer) execute(
 
 	cmd := strings.ToUpper(args[0])
 
+	// ===== RESP CORE =====
+
+	if cmd == "PING" {
+		if len(args) == 1 {
+			return "PONG", "ok"
+		}
+		return args[1], "bulk"
+	}
+
+	if cmd == "ECHO" {
+		if len(args) < 2 {
+			return "", "bulk"
+		}
+		return args[1], "bulk"
+	}
+
+	if cmd == "COMMAND" {
+		if len(args) > 1 {
+			return "*0\r\n", "raw"
+		}
+
+		return "*1\r\n" +
+				"*6\r\n" +
+				"$4\r\nping\r\n" +
+				":-1\r\n" +
+				"*1\r\n$4\r\nfast\r\n" +
+				":0\r\n" +
+				":0\r\n" +
+				":0\r\n",
+			"raw"
+	}
+
+	if cmd == "HELLO" {
+		return "*2\r\n$6\r\nserver\r\n$7\r\nferrodb\r\n", "raw"
+	}
+
 	// ===== AUTH =====
 	if cmd == "AUTH" {
 		if client.authenticated {
@@ -274,8 +312,8 @@ func (s *TCPServer) execute(
 	}
 
 	// ===== QUIT / EXIT =====
-	if cmd == "QUIT" || cmd == "EXIT" {
-		return "BYE", "close"
+	if cmd == "EXIT" && !client.resp {
+		return "Bye 👋", "close"
 	}
 
 	// ===== SELECT =====
@@ -344,6 +382,8 @@ func (s *TCPServer) handleRESP(conn net.Conn, client *Client, args []string) {
 	result, kind := s.execute(client, args)
 
 	switch kind {
+	case "raw":
+		fmt.Fprint(conn, result)
 	case "ok":
 		writeSimpleString(conn, result)
 	case "err":
@@ -352,7 +392,11 @@ func (s *TCPServer) handleRESP(conn net.Conn, client *Client, args []string) {
 		n, _ := strconv.ParseInt(result, 10, 64)
 		writeInteger(conn, n)
 	case "bulk":
-		writeBulkString(conn, result)
+		if result == "" {
+			writeNull(conn)
+		} else {
+			writeBulkString(conn, result)
+		}
 	case "null":
 		writeNull(conn)
 	case "close":
@@ -364,7 +408,7 @@ func (s *TCPServer) handleRESP(conn net.Conn, client *Client, args []string) {
 func (s *TCPServer) handleInline(conn net.Conn, client *Client, line string) {
 	args := strings.Fields(line)
 	if len(args) == 0 {
-		writePrompt(conn, client.db)
+		maybePrompt(conn, client)
 		return
 	}
 
@@ -377,7 +421,7 @@ func (s *TCPServer) handleInline(conn net.Conn, client *Client, line string) {
 	}
 
 	fmt.Fprintln(conn, result)
-	writePrompt(conn, client.db)
+	maybePrompt(conn, client)
 }
 
 func readRESPFromLine(
@@ -416,7 +460,7 @@ func readRESPFromLine(
 
 		// read exact <size> bytes + \r\n
 		buf := make([]byte, size+2)
-		if _, err := r.Read(buf); err != nil {
+		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, err
 		}
 
@@ -425,4 +469,10 @@ func readRESPFromLine(
 	}
 
 	return args, nil
+}
+
+func maybePrompt(conn net.Conn, client *Client) {
+	if !client.resp {
+		writePrompt(conn, client.db)
+	}
 }
