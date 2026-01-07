@@ -172,3 +172,19 @@ func (m *MemoryStore) cleanupExpiredKeys(interval time.Duration) {
 func (m *MemoryStore) DBCount() int {
 	return len(m.data)
 }
+
+func (m *MemoryStore) Keys(db int) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	keys := make([]string, 0, len(m.data[db]))
+	now := time.Now().Unix()
+
+	for k, v := range m.data[db] {
+		if v.ExpireAt > 0 && now > v.ExpireAt {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	return keys
+}

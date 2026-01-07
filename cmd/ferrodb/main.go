@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"ferrodb/internal/adminapi"
 	"ferrodb/internal/config"
 	"ferrodb/internal/engine"
 	"ferrodb/internal/server"
@@ -20,14 +21,16 @@ func main() {
 	)
 	defer stop()
 
+	// Load config
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Fatal("failed to load config:", err)
 	}
 
+	// Init engine
 	eng := engine.New(cfg)
 
-	// 🔴 TCP (redis-cli)
+	// 🔴 TCP Server (RESP / redis-cli)
 	tcpServer := server.NewTCPServer(
 		cfg.Server.Address,
 		cfg.Users,
@@ -35,21 +38,17 @@ func main() {
 		eng,
 	)
 
-	// 🟢 HTTP (Web UI / API)
-	httpServer := server.NewHTTPServer(
-		":8080",
-		eng,
-	)
+	// 🟢 Admin HTTP API (Web UI backend)
+	adminapi.SetEngine(eng)
+	adminServer := adminapi.New(":8080")
+	adminServer.Start()
 
+	// Start TCP server
 	go func() {
 		if err := tcpServer.Start(); err != nil {
 			log.Println("TCP server error:", err)
 			stop()
 		}
-	}()
-
-	go func() {
-		httpServer.Start()
 	}()
 
 	<-ctx.Done()

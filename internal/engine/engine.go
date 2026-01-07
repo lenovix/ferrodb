@@ -157,6 +157,22 @@ func (e *Engine) executeInternal(db int, input string, persist bool) string {
 		}
 		return "1"
 
+	case "KEYS":
+		if len(cmd.Args) < 1 {
+			return "ERR KEYS requires pattern"
+		}
+
+		if cmd.Args[0] != "*" {
+			return "ERR only '*' pattern supported"
+		}
+
+		keys := e.store.Keys(db)
+		if len(keys) == 0 {
+			return "(nil)"
+		}
+
+		return strings.Join(keys, "\n")
+
 	case "BGREWRITEAOF":
 		go e.RewriteAOF()
 		return "OK"
@@ -179,6 +195,7 @@ func (e *Engine) executeInternal(db int, input string, persist bool) string {
 			"ACL LIST",
 			"ACL CAT",
 			"AUTH username password",
+			"KEYS *",
 			"LOGOUT",
 			"EXIT",
 		}, "\n")
@@ -205,4 +222,8 @@ func (e *Engine) Shutdown() {
 
 func (e *Engine) DBCount() int {
 	return e.store.DBCount()
+}
+
+func (e *Engine) Keys(db int) []string {
+	return e.store.Keys(db)
 }

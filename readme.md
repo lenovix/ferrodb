@@ -7,6 +7,7 @@ Etcd (simplified)
 
 | Version | Description                                                    |
 | ------: | -------------------------------------------------------------- |
+|   0.5.1 | Admin REST API                                                 |
 |   0.5 | HTTP API + Web UI (Alpha)                                                   |
 |   0.4.1 | Redis Compatibility Basics                                                   |
 |   0.4 | RESP protocol                                                   |
