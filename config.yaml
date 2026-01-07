@@ -3,15 +3,15 @@ server:
 
 users:
   - username: admin
-    password: admin123
+    password: "$2a$10$v9F62K183D3gQ89Tdh7sc.0mKZ1EBgalkt4lskgezVHOg.vs/gz5W"
     role: admin
 
   - username: app
-    password: app123
+    password: "$2a$10$0oKQ4LWdqQLa1w4YVJJdgOaodGjl.x3lMKXE7due/9whwyOmdv9zm"
     role: writer
 
   - username: guest
-    password: guest
+    password: "$2a$10$9Uh9JIRocGFMlWipQZRAAO7T17LJypgBmWGGga41TMH8Hhz5Hzu0m"
     role: reader
 
 data:

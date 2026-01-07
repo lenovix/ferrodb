@@ -11,6 +11,8 @@ import (
 
 	"ferrodb/internal/config"
 	"ferrodb/internal/engine"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type TCPServer struct {
@@ -101,6 +103,12 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		command := strings.ToUpper(cmd[0])
 
 		if command == "AUTH" {
+			if client.authenticated {
+				fmt.Fprintln(conn, "ERR already authenticated")
+				writePrompt(conn, client.db)
+				continue
+			}
+
 			if len(cmd) < 3 {
 				fmt.Fprintln(conn, "ERR AUTH requires username and password")
 				writePrompt(conn, client.db)
@@ -122,6 +130,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		}
 
 		if !client.authenticated {
+			client.user = nil
 			if isPublicCommand(command) {
 				result := s.engine.Execute(client.db, line)
 				fmt.Fprintln(conn, result)
@@ -191,10 +200,17 @@ func writePrompt(conn net.Conn, db int) {
 }
 
 func (s *TCPServer) findUser(username, password string) *config.User {
-	for i := range s.users {
-		u := &s.users[i]
-		if u.Username == username && u.Password == password {
-			return u
+	for _, u := range s.users {
+		if u.Username != username {
+			continue
+		}
+
+		err := bcrypt.CompareHashAndPassword(
+			[]byte(u.Password),
+			[]byte(password),
+		)
+		if err == nil {
+			return &u
 		}
 	}
 	return nil
