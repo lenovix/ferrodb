@@ -20,6 +20,7 @@ type TCPServer struct {
 	engine   *engine.Engine
 	listener net.Listener
 	users    []config.User
+	dbCount  int
 }
 
 type Client struct {
@@ -27,6 +28,7 @@ type Client struct {
 	authenticated bool
 	user          *config.User
 	db            int
+	resp          bool
 }
 
 var rolePermissions = map[string]map[string]bool{
@@ -50,11 +52,17 @@ var rolePermissions = map[string]map[string]bool{
 	},
 }
 
-func NewTCPServer(addr string, users []config.User, engine *engine.Engine) *TCPServer {
+func NewTCPServer(
+	addr string,
+	users []config.User,
+	dbCount int,
+	engine *engine.Engine,
+) *TCPServer {
 	return &TCPServer{
-		addr:   addr,
-		engine: engine,
-		users:  users,
+		addr:    addr,
+		users:   users,
+		dbCount: dbCount,
+		engine:  engine,
 	}
 }
 
@@ -88,171 +96,31 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		db: 0,
 	}
 
-	fmt.Fprintln(conn, "Welcome to FerroDB v0.3.4")
-	writePrompt(conn, client.db)
+	reader := bufio.NewReader(conn)
 
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimSpace(line)
+
 		if line == "" {
 			writePrompt(conn, client.db)
 			continue
 		}
 
-		cmd := strings.Fields(line)
-		command := strings.ToUpper(cmd[0])
-
-		if command == "AUTH" && client.authenticated {
-			fmt.Fprintln(conn, "ERR already authenticated (use LOGOUT first)")
-			writePrompt(conn, client.db)
+		if line[0] == '*' {
+			args, err := readRESPFromLine(reader, line)
+			if err != nil {
+				writeError(conn, "ERR invalid RESP")
+				continue
+			}
+			s.handleRESP(conn, client, args)
 			continue
 		}
 
-		if command == "AUTH" {
-			if client.authenticated {
-				fmt.Fprintln(conn, "ERR already authenticated")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			if len(cmd) < 3 {
-				fmt.Fprintln(conn, "ERR AUTH requires username and password")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			user := s.findUser(cmd[1], cmd[2])
-			if user == nil {
-				fmt.Fprintln(conn, "ERR invalid credentials")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			client.authenticated = true
-			client.user = user
-			fmt.Fprintf(conn, "OK (%s)\n", user.Role)
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		if !client.authenticated {
-			client.user = nil
-			if isPublicCommand(command) {
-				result := s.engine.Execute(client.db, line)
-				fmt.Fprintln(conn, result)
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			fmt.Fprintln(conn, "NOAUTH Authentication required")
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		if !hasPermission(client.user.Role, command) {
-			fmt.Fprintln(conn, "NOPERM permission denied")
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		if command == "SELECT" {
-			if len(cmd) < 2 {
-				fmt.Fprintln(conn, "ERR SELECT requires index")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			db, err := strconv.Atoi(cmd[1])
-			if err != nil || db < 0 || db > 15 {
-				fmt.Fprintln(conn, "ERR invalid DB index")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			client.db = db
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		if command == "EXIT" {
-			fmt.Fprintln(conn, "Bye 👋")
-			return
-		}
-
-		if command == "ACL" {
-			if !client.authenticated {
-				fmt.Fprintln(conn, "NOAUTH Authentication required")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			if len(cmd) < 2 {
-				fmt.Fprintln(conn, "ERR ACL requires subcommand")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			sub := strings.ToUpper(cmd[1])
-
-			switch sub {
-
-			case "WHOAMI":
-				fmt.Fprintf(conn, "user=%s role=%s\n",
-					client.user.Username,
-					client.user.Role,
-				)
-
-			case "LIST":
-				if client.user.Role != "admin" {
-					fmt.Fprintln(conn, "NOPERM admin only")
-					writePrompt(conn, client.db)
-					continue
-				}
-
-				for _, u := range s.users {
-					fmt.Fprintf(conn,
-						"user %s role=%s\n",
-						u.Username,
-						u.Role,
-					)
-				}
-
-			case "CAT":
-				role := client.user.Role
-				perms := rolePermissions[role]
-
-				fmt.Fprintf(conn, "role=%s\n", role)
-				for p := range perms {
-					fmt.Fprintf(conn, "- %s\n", p)
-				}
-
-			default:
-				fmt.Fprintln(conn, "ERR unknown ACL subcommand")
-			}
-
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		if command == "LOGOUT" {
-			if !client.authenticated {
-				fmt.Fprintln(conn, "ERR not authenticated")
-				writePrompt(conn, client.db)
-				continue
-			}
-
-			client.authenticated = false
-			client.user = nil
-			client.db = 0
-
-			fmt.Fprintln(conn, "OK logged out")
-			writePrompt(conn, client.db)
-			continue
-		}
-
-		result := s.engine.Execute(client.db, line)
-		fmt.Fprintln(conn, result)
-		writePrompt(conn, client.db)
+		s.handleInline(conn, client, line)
 	}
 }
 
@@ -265,7 +133,7 @@ func (s *TCPServer) Shutdown() {
 
 func isPublicCommand(cmd string) bool {
 	switch cmd {
-	case "HELP", "INFO":
+	case "HELP", "INFO", "EXIT":
 		return true
 	default:
 		return false
@@ -304,4 +172,257 @@ func hasPermission(role, command string) bool {
 		return true
 	}
 	return perms[command]
+}
+
+// func (s *TCPServer) handleCommandInline(
+// 	conn net.Conn,
+// 	client *Client,
+// 	line string,
+// ) {
+// 	result := s.execute(client, strings.Fields(line))
+// 	fmt.Fprintln(conn, result)
+// 	writePrompt(conn, client.db)
+// }
+
+// func (s *TCPServer) handleCommandRESP(
+// 	conn net.Conn,
+// 	client *Client,
+// 	args []string,
+// ) {
+// 	result, kind := s.executeRESP(client, args)
+
+// 	switch kind {
+// 	case "ok":
+// 		writeSimpleString(conn, result)
+// 	case "err":
+// 		writeError(conn, result)
+// 	case "int":
+// 		n, _ := strconv.ParseInt(result, 10, 64)
+// 		writeInteger(conn, n)
+// 	case "bulk":
+// 		if result == "" {
+// 			writeNull(conn)
+// 		} else {
+// 			writeBulkString(conn, result)
+// 		}
+// 	}
+// }
+
+// func (s *TCPServer) executeRESP(client *Client, args []string) (string, string) {
+// 	cmd := strings.ToUpper(args[0])
+
+// 	result := s.engine.Execute(client.db, strings.Join(args, " "))
+
+// 	switch cmd {
+// 	case "GET":
+// 		if result == "(nil)" {
+// 			return "", "bulk"
+// 		}
+// 		return result, "bulk"
+
+// 	case "TTL":
+// 		return result, "int"
+
+// 	default:
+// 		if strings.HasPrefix(result, "ERR") {
+// 			return result, "err"
+// 		}
+// 		return result, "ok"
+// 	}
+// }
+
+func (s *TCPServer) execute(
+	client *Client,
+	args []string,
+) (string, string) {
+
+	cmd := strings.ToUpper(args[0])
+
+	// ===== AUTH =====
+	if cmd == "AUTH" {
+		if client.authenticated {
+			return "ERR already authenticated (use LOGOUT)", "err"
+		}
+		if len(args) < 3 {
+			return "ERR AUTH username password", "err"
+		}
+		user := s.findUser(args[1], args[2])
+		if user == nil {
+			return "ERR invalid credentials", "err"
+		}
+		client.authenticated = true
+		client.user = user
+		return "OK", "ok"
+	}
+
+	// ===== PUBLIC =====
+	if !client.authenticated && !isPublicCommand(cmd) {
+		return "NOAUTH Authentication required", "err"
+	}
+
+	// ===== PERMISSION =====
+	if client.authenticated && !hasPermission(client.user.Role, cmd) {
+		return "NOPERM permission denied", "err"
+	}
+
+	// ===== LOGOUT =====
+	if cmd == "LOGOUT" {
+		client.authenticated = false
+		client.user = nil
+		client.db = 0
+		return "OK logged out", "ok"
+	}
+
+	// ===== QUIT / EXIT =====
+	if cmd == "QUIT" || cmd == "EXIT" {
+		return "BYE", "close"
+	}
+
+	// ===== SELECT =====
+	if cmd == "SELECT" {
+		if len(args) < 2 {
+			return "ERR SELECT index", "err"
+		}
+		db, err := strconv.Atoi(args[1])
+		if err != nil || db < 0 || db >= s.dbCount {
+			return "ERR invalid DB index", "err"
+		}
+		client.db = db
+		return "OK", "ok"
+	}
+
+	// ===== ACL =====
+	if cmd == "ACL" {
+		if len(args) < 2 {
+			return "ERR ACL subcommand required", "err"
+		}
+		sub := strings.ToUpper(args[1])
+
+		switch sub {
+		case "WHOAMI":
+			return fmt.Sprintf(
+				"user=%s role=%s",
+				client.user.Username,
+				client.user.Role,
+			), "bulk"
+
+		case "CAT":
+			perms := rolePermissions[client.user.Role]
+			var out []string
+			for p := range perms {
+				out = append(out, p)
+			}
+			return strings.Join(out, " "), "bulk"
+
+		default:
+			return "ERR unknown ACL subcommand", "err"
+		}
+	}
+
+	// ===== ENGINE =====
+	res := s.engine.Execute(client.db, strings.Join(args, " "))
+
+	if strings.HasPrefix(res, "ERR") {
+		return res, "err"
+	}
+
+	// RESP-aware type
+	switch cmd {
+	case "GET":
+		if res == "(nil)" {
+			return "", "null"
+		}
+		return res, "bulk"
+	case "TTL":
+		return res, "int"
+	default:
+		return res, "ok"
+	}
+}
+
+func (s *TCPServer) handleRESP(conn net.Conn, client *Client, args []string) {
+	result, kind := s.execute(client, args)
+
+	switch kind {
+	case "ok":
+		writeSimpleString(conn, result)
+	case "err":
+		writeError(conn, result)
+	case "int":
+		n, _ := strconv.ParseInt(result, 10, 64)
+		writeInteger(conn, n)
+	case "bulk":
+		writeBulkString(conn, result)
+	case "null":
+		writeNull(conn)
+	case "close":
+		writeSimpleString(conn, result)
+		conn.Close()
+	}
+}
+
+func (s *TCPServer) handleInline(conn net.Conn, client *Client, line string) {
+	args := strings.Fields(line)
+	if len(args) == 0 {
+		writePrompt(conn, client.db)
+		return
+	}
+
+	result, kind := s.execute(client, args)
+
+	if kind == "close" {
+		fmt.Fprintln(conn, result)
+		conn.Close()
+		return
+	}
+
+	fmt.Fprintln(conn, result)
+	writePrompt(conn, client.db)
+}
+
+func readRESPFromLine(
+	r *bufio.Reader,
+	firstLine string,
+) ([]string, error) {
+
+	// firstLine contoh: "*3"
+	if len(firstLine) < 2 || firstLine[0] != '*' {
+		return nil, fmt.Errorf("invalid RESP array")
+	}
+
+	count, err := strconv.Atoi(firstLine[1:])
+	if err != nil || count < 0 {
+		return nil, fmt.Errorf("invalid RESP array length")
+	}
+
+	args := make([]string, 0, count)
+
+	for i := 0; i < count; i++ {
+		// expect: $<len>
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		line = strings.TrimSpace(line)
+
+		if len(line) < 2 || line[0] != '$' {
+			return nil, fmt.Errorf("invalid RESP bulk string")
+		}
+
+		size, err := strconv.Atoi(line[1:])
+		if err != nil || size < 0 {
+			return nil, fmt.Errorf("invalid bulk size")
+		}
+
+		// read exact <size> bytes + \r\n
+		buf := make([]byte, size+2)
+		if _, err := r.Read(buf); err != nil {
+			return nil, err
+		}
+
+		arg := string(buf[:size])
+		args = append(args, arg)
+	}
+
+	return args, nil
 }

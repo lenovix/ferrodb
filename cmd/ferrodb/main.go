@@ -30,6 +30,7 @@ func main() {
 	tcpServer := server.NewTCPServer(
 		cfg.Server.Address,
 		cfg.Users,
+		cfg.Engine.DBCount,
 		eng,
 	)
 

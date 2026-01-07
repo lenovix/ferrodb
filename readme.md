@@ -2,6 +2,8 @@
 
 | Version | Description                                                    |
 | ------: | -------------------------------------------------------------- |
+|   0.4 | RESP protocol                                                   |
+|   0.3.5 | ACL Commands                                                   |
 |   0.3.5 | Password hashing (bcrypt) + secure AUTH                        |
 |   0.3.4 | AUTH + ACL (role-based)                                        |
 |   0.3.3 | Improve Multi-DB                                               |
@@ -29,6 +31,7 @@ Buka terminal lain untuk menghubungkan client menggunakan Telnet:
 
 ```bash
 telnet [your ip] 6380
+redis-cli -h [your ip] -p 6380
 ```
 
 > Pastikan alamat IP dan port sesuai dengan konfigurasi server kamu.
@@ -68,3 +71,5 @@ telnet [your ip] 6380
 
 - **TCP**
   Protokol jaringan yang digunakan ferroDB untuk komunikasi client-server.
+
+- **RESP**
