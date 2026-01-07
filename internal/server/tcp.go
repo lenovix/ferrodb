@@ -102,6 +102,12 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 		cmd := strings.Fields(line)
 		command := strings.ToUpper(cmd[0])
 
+		if command == "AUTH" && client.authenticated {
+			fmt.Fprintln(conn, "ERR already authenticated (use LOGOUT first)")
+			writePrompt(conn, client.db)
+			continue
+		}
+
 		if command == "AUTH" {
 			if client.authenticated {
 				fmt.Fprintln(conn, "ERR already authenticated")
@@ -173,6 +179,77 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 			return
 		}
 
+		if command == "ACL" {
+			if !client.authenticated {
+				fmt.Fprintln(conn, "NOAUTH Authentication required")
+				writePrompt(conn, client.db)
+				continue
+			}
+
+			if len(cmd) < 2 {
+				fmt.Fprintln(conn, "ERR ACL requires subcommand")
+				writePrompt(conn, client.db)
+				continue
+			}
+
+			sub := strings.ToUpper(cmd[1])
+
+			switch sub {
+
+			case "WHOAMI":
+				fmt.Fprintf(conn, "user=%s role=%s\n",
+					client.user.Username,
+					client.user.Role,
+				)
+
+			case "LIST":
+				if client.user.Role != "admin" {
+					fmt.Fprintln(conn, "NOPERM admin only")
+					writePrompt(conn, client.db)
+					continue
+				}
+
+				for _, u := range s.users {
+					fmt.Fprintf(conn,
+						"user %s role=%s\n",
+						u.Username,
+						u.Role,
+					)
+				}
+
+			case "CAT":
+				role := client.user.Role
+				perms := rolePermissions[role]
+
+				fmt.Fprintf(conn, "role=%s\n", role)
+				for p := range perms {
+					fmt.Fprintf(conn, "- %s\n", p)
+				}
+
+			default:
+				fmt.Fprintln(conn, "ERR unknown ACL subcommand")
+			}
+
+			writePrompt(conn, client.db)
+			continue
+		}
+
+		if command == "LOGOUT" {
+			if !client.authenticated {
+				fmt.Fprintln(conn, "ERR not authenticated")
+				writePrompt(conn, client.db)
+				continue
+			}
+
+			client.authenticated = false
+			client.user = nil
+			client.db = 0
+
+			fmt.Fprintln(conn, "OK logged out")
+			writePrompt(conn, client.db)
+			continue
+		}
+
 		result := s.engine.Execute(client.db, line)
 		fmt.Fprintln(conn, result)
 		writePrompt(conn, client.db)
@@ -217,6 +294,11 @@ func (s *TCPServer) findUser(username, password string) *config.User {
 }
 
 func hasPermission(role, command string) bool {
+	switch command {
+	case "AUTH", "HELP", "INFO", "ACL", "LOGOUT":
+		return true
+	}
+
 	perms := rolePermissions[role]
 	if perms["*"] {
 		return true

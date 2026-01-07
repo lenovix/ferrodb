@@ -160,6 +160,11 @@ func (e *Engine) executeInternal(db int, input string, persist bool) string {
 			"BGREWRITEAOF",
 			"INFO",
 			"SELECT db",
+			"ACL WHOAMI",
+			"ACL LIST",
+			"ACL CAT",
+			"AUTH username password",
+			"LOGOUT",
 			"EXIT",
 		}, "\n")
 
