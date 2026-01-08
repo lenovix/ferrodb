@@ -33,7 +33,6 @@ func healthHandler(w http.ResponseWriter, _ *http.Request) {
 
 func listDBHandler(w http.ResponseWriter, _ *http.Request) {
 	jsonOK(w)
-
 	json.NewEncoder(w).Encode(map[string]any{
 		"db_count": eng.DBCount(),
 	})
@@ -46,13 +45,13 @@ func dbRouter(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
 	if len(parts) < 3 {
-		http.NotFound(w, r)
+		writeJSONError(w, "invalid path", http.StatusNotFound)
 		return
 	}
 
 	db, err := strconv.Atoi(parts[2])
 	if err != nil {
-		http.Error(w, "invalid db", http.StatusBadRequest)
+		writeJSONError(w, "invalid db", http.StatusBadRequest)
 		return
 	}
 
@@ -68,7 +67,7 @@ func dbRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.NotFound(w, r)
+	writeJSONError(w, "not found", http.StatusNotFound)
 }
 
 // --- keys ---
@@ -80,7 +79,11 @@ func listKeys(w http.ResponseWriter, db int) {
 	keys := []string{}
 
 	if res != "(nil)" && res != "" {
-		keys = strings.Split(res, "\n")
+		for _, k := range strings.Split(res, "\n") {
+			if k != "" {
+				keys = append(keys, k)
+			}
+		}
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
@@ -93,21 +96,21 @@ func listKeys(w http.ResponseWriter, db int) {
 
 func handleKey(w http.ResponseWriter, r *http.Request, db int, rest []string) {
 	if len(rest) < 1 {
-		http.Error(w, "missing key", http.StatusBadRequest)
+		writeJSONError(w, "missing key", http.StatusBadRequest)
 		return
 	}
 
 	key := rest[0]
 
 	switch r.Method {
-	case "GET":
+	case http.MethodGet:
 		getKey(w, db, key)
-	case "POST":
-		setKey(w, r, db)
-	case "DELETE":
+	case http.MethodPost:
+		setKey(w, r, db, key)
+	case http.MethodDelete:
 		delKey(w, db, key)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeJSONError(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -116,7 +119,7 @@ func getKey(w http.ResponseWriter, db int, key string) {
 
 	val := eng.Execute(db, "GET "+key)
 	if val == "(nil)" {
-		http.NotFound(w, nil)
+		writeJSONError(w, "key not found", http.StatusNotFound)
 		return
 	}
 
@@ -129,21 +132,27 @@ func getKey(w http.ResponseWriter, db int, key string) {
 	})
 }
 
-func setKey(w http.ResponseWriter, r *http.Request, db int) {
+func setKey(w http.ResponseWriter, r *http.Request, db int, key string) {
 	jsonOK(w)
 
 	var body struct {
-		Key   string `json:"key"`
 		Value string `json:"value"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeJSONError(w, "invalid json body", http.StatusBadRequest)
 		return
 	}
 
-	eng.Execute(db, "SET "+body.Key+" "+body.Value)
-	w.WriteHeader(http.StatusCreated)
+	// allow empty string value
+	cmd := "SET " + key + " " + body.Value
+	eng.Execute(db, cmd)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "ok",
+		"key":    key,
+	})
 }
 
 func delKey(w http.ResponseWriter, db int, key string) {
@@ -157,5 +166,13 @@ func delKey(w http.ResponseWriter, db int, key string) {
 
 	json.NewEncoder(w).Encode(map[string]int{
 		"deleted": deleted,
+	})
+}
+
+func writeJSONError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": msg,
 	})
 }
